@@ -44,27 +44,7 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
   const { position, isTracking, startTracking, stopTracking } = useGps(8000);
   const { display: timerDisplay } = useTripTimer(tripStartTime);
 
-  useEffect(() => {
-    loadDriver();
-  }, [driverId]);
-
-  async function loadDriver() {
-    const { data } = await supabase
-      .from('drivers')
-      .select('*')
-      .eq('id', driverId)
-      .maybeSingle();
-
-    if (data) {
-      setDriver(data);
-      if (data.status === 'on_trip') {
-        resumeActiveTrip(data.id);
-      }
-    }
-    setLoading(false);
-  }
-
-  async function resumeActiveTrip(drvId: string) {
+  const resumeActiveTrip = useCallback(async (drvId: string) => {
     const { data: trip } = await supabase
       .from('trips')
       .select('*')
@@ -81,7 +61,27 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
       gpsPathRef.current = trip.gps_path || [];
       startTracking();
     }
-  }
+  }, [startTracking]);
+
+  const loadDriver = useCallback(async () => {
+    const { data } = await supabase
+      .from('drivers')
+      .select('*')
+      .eq('id', driverId)
+      .maybeSingle();
+
+    if (data) {
+      setDriver(data);
+      if (data.status === 'on_trip') {
+        resumeActiveTrip(data.id);
+      }
+    }
+    setLoading(false);
+  }, [driverId, resumeActiveTrip]);
+
+  useEffect(() => {
+    loadDriver();
+  }, [loadDriver]);
 
   useEffect(() => {
     if (!position || !tripId || !isTracking) return;

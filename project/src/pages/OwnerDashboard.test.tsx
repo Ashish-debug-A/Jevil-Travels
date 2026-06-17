@@ -184,6 +184,14 @@ describe('OwnerDashboard', () => {
     });
   });
 
+  it('calls onBack when Home button is clicked', async () => {
+    const user = userEvent.setup();
+    render(<OwnerDashboard onBack={onBack} />);
+
+    await user.click(screen.getByText('Home'));
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
   it('subscribes to realtime channels on mount', () => {
     render(<OwnerDashboard onBack={onBack} />);
     expect(mockChannel.on).toHaveBeenCalled();

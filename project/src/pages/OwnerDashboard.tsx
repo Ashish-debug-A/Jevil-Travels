@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { ChevronDown, ChevronUp, Filter, MapPin, Clock, Users as UsersIcon } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Filter, MapPin, Clock, Users as UsersIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Header from '../components/Header';
 import BottomNav, { type NavTab } from '../components/BottomNav';
@@ -38,7 +38,7 @@ function FlyToDriver({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
-export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps) {
+export default function OwnerDashboard({ onBack }: OwnerDashboardProps) {
   const [activeTab, setActiveTab] = useState<NavTab>('map');
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [locations, setLocations] = useState<Record<string, DriverCurrentLocation>>({});
@@ -63,7 +63,7 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
     if (activeTab === 'history' && trips.length === 0 && !tripsLoading) {
       loadTrips();
     }
-  }, [activeTab]);
+  }, [activeTab, trips.length, tripsLoading]);
 
   async function loadDrivers() {
     const { data } = await supabase.from('drivers').select('*').order('name');
@@ -152,6 +152,16 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
         subtitle="Owner Dashboard"
         showActiveCount={activeCount}
       />
+
+      <div className="px-4 pt-3">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-gray-400 text-sm hover:text-white transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Home</span>
+        </button>
+      </div>
 
       {/* Map Tab */}
       {activeTab === 'map' && (
