@@ -39,6 +39,7 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const gpsPathRef = useRef<GpsPoint[]>([]);
 
   const { position, isTracking, startTracking, stopTracking } = useGps(8000);
@@ -49,11 +50,18 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
   }, [driverId]);
 
   async function loadDriver() {
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('drivers')
       .select('*')
       .eq('id', driverId)
       .maybeSingle();
+
+    if (fetchError) {
+      console.error('Failed to load driver:', fetchError.message);
+      setError('Failed to load driver profile. Please try again.');
+      setLoading(false);
+      return;
+    }
 
     if (data) {
       setDriver(data);
@@ -65,7 +73,7 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
   }
 
   async function resumeActiveTrip(drvId: string) {
-    const { data: trip } = await supabase
+    const { data: trip, error: tripError } = await supabase
       .from('trips')
       .select('*')
       .eq('driver_id', drvId)
@@ -73,6 +81,12 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
       .order('start_time', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    if (tripError) {
+      console.error('Failed to resume active trip:', tripError.message);
+      setError('Failed to resume active trip. Please try again.');
+      return;
+    }
 
     if (trip) {
       setTripId(trip.id);
@@ -119,14 +133,20 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
       supabase.from('drivers').update({
         last_seen: new Date().toISOString(),
       }).eq('id', driverId),
-    ]);
+    ]).then(results => {
+      for (const result of results) {
+        if (result.error) {
+          console.error('GPS sync error:', result.error.message);
+        }
+      }
+    });
   }, [position, tripId, isTracking, driverId]);
 
   const handleStartTrip = useCallback(async () => {
     if (!driver || starting) return;
     setStarting(true);
 
-    const { data: trip } = await supabase
+    const { data: trip, error: tripError } = await supabase
       .from('trips')
       .insert({
         driver_id: driver.id,
@@ -138,6 +158,13 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
       .select()
       .maybeSingle();
 
+    if (tripError) {
+      console.error('Failed to start trip:', tripError.message);
+      setError('Failed to start trip. Please try again.');
+      setStarting(false);
+      return;
+    }
+
     if (trip) {
       setTripId(trip.id);
       setTripStartTime(trip.start_time);
@@ -145,11 +172,16 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
       setGpsPath([]);
     }
 
-    await supabase
+    const { error: statusError } = await supabase
       .from('drivers')
       .update({ status: 'on_trip' })
       .eq('id', driver.id);
 
+    if (statusError) {
+      console.error('Failed to update driver status:', statusError.message);
+    }
+
+    setError(null);
     setDriver(prev => prev ? { ...prev, status: 'on_trip' } : prev);
     startTracking();
     setStarting(false);
@@ -168,7 +200,7 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
 
     const distance = calculateDistance(gpsPathRef.current);
 
-    await supabase
+    const { error: tripUpdateError } = await supabase
       .from('trips')
       .update({
         end_time: endTime,
@@ -179,23 +211,40 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
       })
       .eq('id', tripId);
 
-    await supabase
+    if (tripUpdateError) {
+      console.error('Failed to end trip:', tripUpdateError.message);
+      setError('Failed to save trip data. Please try again.');
+      setEnding(false);
+      startTracking();
+      return;
+    }
+
+    const { error: driverUpdateError } = await supabase
       .from('drivers')
       .update({ status: 'completed' })
       .eq('id', driver.id);
 
-    await supabase
+    if (driverUpdateError) {
+      console.error('Failed to update driver status:', driverUpdateError.message);
+    }
+
+    const { error: locUpdateError } = await supabase
       .from('driver_current_location')
       .update({ status: 'completed' })
       .eq('driver_id', driver.id);
 
+    if (locUpdateError) {
+      console.error('Failed to update driver location status:', locUpdateError.message);
+    }
+
+    setError(null);
     setTripId(null);
     setTripStartTime(null);
     setGpsPath([]);
     gpsPathRef.current = [];
     setDriver(prev => prev ? { ...prev, status: 'completed' } : prev);
     setEnding(false);
-  }, [driver, tripId, ending, stopTracking, tripStartTime]);
+  }, [driver, tripId, ending, stopTracking, startTracking, tripStartTime]);
 
   if (loading) {
     return (
@@ -213,7 +262,7 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
       <div className="page-container">
         <Header subtitle="Driver App" />
         <div className="p-4 text-center">
-          <p className="text-gray-400">Driver not found</p>
+          <p className="text-gray-400">{error || 'Driver not found'}</p>
           <button onClick={onBack} className="mt-4 text-brand-500 text-sm font-semibold">
             Go Back
           </button>
@@ -270,6 +319,14 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
               ))}
             </div>
           </div>
+
+          {/* Error Banner */}
+          {error && (
+            <div className="flex items-center justify-between bg-red-500/10 border border-red-500/20 p-3 rounded-btn">
+              <p className="text-red-400 text-xs flex-1">{error}</p>
+              <button onClick={() => setError(null)} className="text-red-400 text-xs font-semibold ml-2 hover:underline">Dismiss</button>
+            </div>
+          )}
 
           {/* Trip Timer */}
           {isOnTrip && tripStartTime && (

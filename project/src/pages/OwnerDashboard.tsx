@@ -49,6 +49,7 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
   const [filterDate, setFilterDate] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedTrip, setExpandedTrip] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const mapRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
@@ -66,13 +67,22 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
   }, [activeTab]);
 
   async function loadDrivers() {
-    const { data } = await supabase.from('drivers').select('*').order('name');
-    if (data) setDrivers(data);
+    const { data, error: fetchError } = await supabase.from('drivers').select('*').order('name');
+    if (fetchError) {
+      console.error('Failed to load drivers:', fetchError.message);
+      setError('Failed to load drivers.');
+    } else if (data) {
+      setDrivers(data);
+    }
     setLoading(false);
   }
 
   async function loadLocations() {
-    const { data } = await supabase.from('driver_current_location').select('*');
+    const { data, error: fetchError } = await supabase.from('driver_current_location').select('*');
+    if (fetchError) {
+      console.error('Failed to load locations:', fetchError.message);
+      return;
+    }
     if (data) {
       const map: Record<string, DriverCurrentLocation> = {};
       data.forEach((loc: DriverCurrentLocation) => {
@@ -116,13 +126,18 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
 
   async function loadTrips() {
     setTripsLoading(true);
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('trips')
       .select('*')
       .eq('status', 'completed')
       .order('start_time', { ascending: false })
       .limit(100);
-    if (data) setTrips(data);
+    if (fetchError) {
+      console.error('Failed to load trips:', fetchError.message);
+      setError('Failed to load trip history.');
+    } else if (data) {
+      setTrips(data);
+    }
     setTripsLoading(false);
   }
 
@@ -152,6 +167,14 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
         subtitle="Owner Dashboard"
         showActiveCount={activeCount}
       />
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mx-4 mt-2 flex items-center justify-between bg-red-500/10 border border-red-500/20 p-3 rounded-lg">
+          <p className="text-red-400 text-xs flex-1">{error}</p>
+          <button onClick={() => setError(null)} className="text-red-400 text-xs font-semibold ml-2 hover:underline">Dismiss</button>
+        </div>
+      )}
 
       {/* Map Tab */}
       {activeTab === 'map' && (
