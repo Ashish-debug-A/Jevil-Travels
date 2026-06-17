@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { ChevronDown, ChevronUp, Filter, MapPin, Clock, Users as UsersIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -7,35 +7,15 @@ import Header from '../components/Header';
 import BottomNav, { type NavTab } from '../components/BottomNav';
 import StatusBadge from '../components/StatusBadge';
 import SkeletonLoader from '../components/SkeletonLoader';
-import type { Driver, DriverCurrentLocation, Trip, DriverStatus } from '../lib/types';
+import { createMarkerIcon, TILE_URL, TILE_ATTRIBUTION, GPS_PATH_COLOR } from '../lib/mapConstants';
+import FlyToLocation from '../components/FlyToLocation';
+import { DEFAULT_CENTER } from '../lib/geo';
+import { getDriverInitials } from '../lib/driverUtils';
+import { formatLastSeen, formatDate, formatTime, formatDuration, formatDistance } from '../lib/formatters';
+import type { Driver, DriverCurrentLocation, Trip } from '../lib/types';
 
 interface OwnerDashboardProps {
   onBack: () => void;
-}
-
-const markerColors: Record<DriverStatus, string> = {
-  idle: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
-  on_trip: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-  completed: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-};
-
-function getIcon(status: DriverStatus) {
-  return new L.Icon({
-    iconUrl: markerColors[status],
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  });
-}
-
-function FlyToDriver({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.flyTo([lat, lng], 15, { duration: 1 });
-  }, [lat, lng, map]);
-  return null;
 }
 
 export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps) {
@@ -138,7 +118,7 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
   const selectedLoc = selectedDriver ? locations[selectedDriver] : null;
   const mapCenter: [number, number] = selectedLoc
     ? [selectedLoc.lat, selectedLoc.lng]
-    : [20.5937, 78.9629];
+    : DEFAULT_CENTER;
 
   const filteredTrips = trips.filter(t => {
     const matchDriver = !filterDriver || t.driver_name.toLowerCase().includes(filterDriver.toLowerCase());
@@ -165,17 +145,17 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
               ref={mapRef}
             >
               <TileLayer
-                attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                attribution={TILE_ATTRIBUTION}
+                url={TILE_URL}
               />
               {selectedLoc && (
-                <FlyToDriver lat={selectedLoc.lat} lng={selectedLoc.lng} />
+                <FlyToLocation lat={selectedLoc.lat} lng={selectedLoc.lng} />
               )}
               {Object.values(locations).map(loc => (
                 <Marker
                   key={loc.driver_id}
                   position={[loc.lat, loc.lng]}
-                  icon={getIcon(loc.status)}
+                  icon={createMarkerIcon(loc.status)}
                 >
                   <Popup>
                     <div className="text-xs font-semibold">
@@ -233,7 +213,7 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
                     ? 'bg-red-500/15 text-red-400'
                     : 'bg-yellow-500/15 text-yellow-400'
                 }`}>
-                  {driver.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {getDriverInitials(driver.name)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
@@ -369,11 +349,11 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
                             zoomControl={false}
                           >
                             <TileLayer
-                              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                              url={TILE_URL}
                             />
                             <Polyline
                               positions={trip.gps_path.map(p => [p.lat, p.lng])}
-                              color="#22c55e"
+                              color={GPS_PATH_COLOR}
                               weight={2}
                             />
                           </MapContainer>
@@ -393,36 +373,4 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
   );
 }
 
-function formatLastSeen(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60000) return 'Just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return new Date(iso).toLocaleDateString();
-}
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric', month: 'short', year: 'numeric'
-  });
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-IN', {
-    hour: '2-digit', minute: '2-digit'
-  });
-}
-
-function formatDuration(seconds: number | null): string {
-  if (!seconds) return '-';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatDistance(meters: number): string {
-  if (!meters) return '-';
-  if (meters < 1000) return `${Math.round(meters)}m`;
-  return `${(meters / 1000).toFixed(1)}km`;
-}

@@ -1,34 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
 import { ArrowLeft, Users, Clock, Navigation } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useGps } from '../hooks/useGps';
 import { useTripTimer } from '../hooks/useTripTimer';
 import Header from '../components/Header';
 import StatusBadge from '../components/StatusBadge';
+import { createMarkerIcon, TILE_URL, TILE_ATTRIBUTION, GPS_PATH_COLOR } from '../lib/mapConstants';
+import FlyToLocation from '../components/FlyToLocation';
+import { calculateDistance, DEFAULT_CENTER } from '../lib/geo';
 import type { Driver, DriverStatus, GpsPoint } from '../lib/types';
 
-const greenIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
+const greenIcon = createMarkerIcon('on_trip');
 
 interface DriverPageProps {
   driverId: string;
   onBack: () => void;
-}
-
-function FlyToCenter({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.flyTo([lat, lng], 15, { duration: 1 });
-  }, [lat, lng, map]);
-  return null;
 }
 
 export default function DriverPage({ driverId, onBack }: DriverPageProps) {
@@ -225,7 +212,7 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
   const isOnTrip = driver.status === 'on_trip';
   const mapCenter: [number, number] = position
     ? [position.lat, position.lng]
-    : [20.5937, 78.9629];
+    : DEFAULT_CENTER;
 
   return (
     <div className="page-container">
@@ -290,19 +277,19 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
             style={{ height: '55vh', width: '100%' }}
           >
             <TileLayer
-              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              attribution={TILE_ATTRIBUTION}
+              url={TILE_URL}
             />
             {position && (
               <>
-                <FlyToCenter lat={position.lat} lng={position.lng} />
+                <FlyToLocation lat={position.lat} lng={position.lng} />
                 <Marker position={[position.lat, position.lng]} icon={greenIcon} />
               </>
             )}
             {gpsPath.length > 1 && (
               <Polyline
                 positions={gpsPath.map(p => [p.lat, p.lng])}
-                color="#22c55e"
+                color={GPS_PATH_COLOR}
                 weight={3}
                 opacity={0.8}
               />
@@ -337,18 +324,4 @@ export default function DriverPage({ driverId, onBack }: DriverPageProps) {
   );
 }
 
-function calculateDistance(points: GpsPoint[]): number {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    const R = 6371000;
-    const dLat = ((points[i].lat - points[i - 1].lat) * Math.PI) / 180;
-    const dLng = ((points[i].lng - points[i - 1].lng) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((points[i - 1].lat * Math.PI) / 180) *
-        Math.cos((points[i].lat * Math.PI) / 180) *
-        Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    total += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-  return Math.round(total);
-}
+

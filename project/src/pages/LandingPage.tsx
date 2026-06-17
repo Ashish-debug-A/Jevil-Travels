@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Leaf, ChevronRight, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { getDriverInitials } from '../lib/driverUtils';
 import type { Driver } from '../lib/types';
 import SkeletonLoader from '../components/SkeletonLoader';
 
@@ -109,7 +110,7 @@ export default function LandingPage({ onSelectDriver, onOpenOwner }: LandingPage
                 className="w-full glass-card p-4 flex items-center gap-3 transition-all duration-300 hover:bg-surface-hover active:scale-[0.98] text-left group"
               >
                 <div className="w-11 h-11 rounded-full bg-brand-500/15 flex items-center justify-center text-brand-500 font-bold text-sm">
-                  {driver.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {getDriverInitials(driver.name)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{driver.name}</p>
