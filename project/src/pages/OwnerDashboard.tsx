@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { ChevronDown, ChevronUp, Filter, MapPin, Clock, Users as UsersIcon } from 'lucide-react';
+import { ChevronDown, ChevronUp, Filter, MapPin, Clock, Users as UsersIcon, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Header from '../components/Header';
 import BottomNav, { type NavTab } from '../components/BottomNav';
 import StatusBadge from '../components/StatusBadge';
 import SkeletonLoader from '../components/SkeletonLoader';
 import type { Driver, DriverCurrentLocation, Trip, DriverStatus } from '../lib/types';
+
+const OWNER_PIN = import.meta.env.VITE_OWNER_PIN || '1234';
 
 interface OwnerDashboardProps {
   onBack: () => void;
@@ -39,6 +41,9 @@ function FlyToDriver({ lat, lng }: { lat: number; lng: number }) {
 }
 
 export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps) {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
   const [activeTab, setActiveTab] = useState<NavTab>('map');
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [locations, setLocations] = useState<Record<string, DriverCurrentLocation>>({});
@@ -52,12 +57,13 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
   const mapRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
+    if (!authenticated) return;
     loadDrivers();
     loadLocations();
     const unsub1 = subscribeToLocations();
     const unsub2 = subscribeToDrivers();
     return () => { unsub1(); unsub2(); };
-  }, []);
+  }, [authenticated]);
 
   useEffect(() => {
     if (activeTab === 'history' && trips.length === 0 && !tripsLoading) {
@@ -124,6 +130,58 @@ export default function OwnerDashboard({ onBack: _onBack }: OwnerDashboardProps)
       .limit(100);
     if (data) setTrips(data);
     setTripsLoading(false);
+  }
+
+  function handlePinSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (pinInput === OWNER_PIN) {
+      setAuthenticated(true);
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setPinInput('');
+    }
+  }
+
+  if (!authenticated) {
+    return (
+      <div className="page-container">
+        <Header subtitle="Owner Dashboard" />
+        <div className="flex flex-col items-center justify-center px-6 pt-20">
+          <div className="w-16 h-16 rounded-full bg-brand-500/15 flex items-center justify-center mb-6">
+            <Lock className="w-8 h-8 text-brand-500" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Owner Access</h2>
+          <p className="text-sm text-gray-400 mb-6 text-center">
+            Enter the owner PIN to access the dashboard.
+          </p>
+          <form onSubmit={handlePinSubmit} className="w-full max-w-xs space-y-3">
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={8}
+              placeholder="Enter PIN"
+              value={pinInput}
+              onChange={(e) => { setPinInput(e.target.value); setPinError(false); }}
+              className={`w-full bg-surface-card border rounded-btn px-4 py-3 text-center text-lg tracking-widest text-white placeholder-gray-500 focus:outline-none transition-colors ${
+                pinError ? 'border-red-500' : 'border-white/5 focus:border-brand-500/50'
+              }`}
+              autoFocus
+            />
+            {pinError && (
+              <p className="text-xs text-red-400 text-center">Incorrect PIN. Try again.</p>
+            )}
+            <button
+              type="submit"
+              disabled={!pinInput}
+              className="w-full bg-brand-500 text-white font-semibold py-3 rounded-btn disabled:opacity-50 transition-opacity"
+            >
+              Unlock Dashboard
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   const activeCount = drivers.filter(d => d.status === 'on_trip').length;
