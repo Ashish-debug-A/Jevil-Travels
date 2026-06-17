@@ -13,6 +13,7 @@ export default function LandingPage({ onSelectDriver, onOpenOwner }: LandingPage
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadDrivers();
@@ -24,16 +25,26 @@ export default function LandingPage({ onSelectDriver, onOpenOwner }: LandingPage
       try {
         setDrivers(JSON.parse(cached));
         setLoading(false);
-      } catch { /* ignore */ }
+      } catch {
+        localStorage.removeItem('jevil_drivers');
+      }
     }
 
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('drivers')
       .select('*')
       .order('name');
 
+    if (fetchError) {
+      console.error('Failed to load drivers:', fetchError.message);
+      setError('Failed to load drivers. Please try again.');
+      setLoading(false);
+      return;
+    }
+
     if (data) {
       setDrivers(data);
+      setError(null);
       localStorage.setItem('jevil_drivers', JSON.stringify(data));
     }
     setLoading(false);
@@ -100,6 +111,16 @@ export default function LandingPage({ onSelectDriver, onOpenOwner }: LandingPage
 
         {loading ? (
           <SkeletonLoader rows={6} />
+        ) : error ? (
+          <div className="text-center py-8">
+            <p className="text-red-400 text-sm">{error}</p>
+            <button
+              onClick={() => { setError(null); setLoading(true); loadDrivers(); }}
+              className="mt-3 text-brand-500 text-sm font-semibold hover:underline"
+            >
+              Retry
+            </button>
+          </div>
         ) : (
           <div className="space-y-2">
             {filtered.map((driver) => (
